@@ -9,7 +9,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:http_client/http_client.dart';
 
-import 'credentials.dart';
+import 'config.dart';
 
 /// AWS response object.
 class AwsResponse {
@@ -58,12 +58,6 @@ const _aws4HmacSha256 = 'AWS4-HMAC-SHA256';
 String _queryComponent(String path) =>
     Uri.encodeQueryComponent(path).replaceAll('+', '%20');
 
-String _extractRegion(Uri uri) {
-  List<String> parts = uri.host.split('.');
-  if (parts.length == 4 && parts[1].contains('-')) return parts[1];
-  throw new Exception('Unable to detect region in ${uri.host}.');
-}
-
 String _extractService(Uri uri) {
   List<String> parts = uri.host.split('.');
   if (parts.length == 4) return parts.first;
@@ -93,14 +87,11 @@ class AwsRequestBuilder {
   /// Sets the body with the given parameters in a form-url-encoded format.
   Map<String, String> formParameters;
 
-  /// AWS region
-  String region;
-
   /// AWS service
   String service;
 
-  /// AWS credentials
-  Credentials credentials;
+  /// AWS Config
+  AWSConfig config;
 
   /// HTTP client
   Client httpClient;
@@ -112,9 +103,8 @@ class AwsRequestBuilder {
     this.headers,
     this.body,
     this.formParameters,
-    this.region,
     this.service,
-    this.credentials,
+    this.config,
     this.httpClient,
     this.baseUrl,
     this.queryParameters,
@@ -122,7 +112,7 @@ class AwsRequestBuilder {
 
   /// Initializes and signs a request.
   Request buildRequest() {
-    assert(credentials != null);
+    assert(config.credentials != null);
     assert(httpClient != null);
     _initDefaults();
     _sign();
@@ -172,7 +162,6 @@ class AwsRequestBuilder {
                 .split('.')
                 .first +
             'Z');
-    region ??= _extractRegion(uri);
     service ??= _extractService(uri);
   }
 
@@ -208,7 +197,7 @@ class AwsRequestBuilder {
     String date = headers['X-Amz-Date'];
     List<String> credentialList = [
       date.substring(0, 8),
-      region,
+      config.region,
       service,
       'aws4_request',
     ];
@@ -220,18 +209,18 @@ class AwsRequestBuilder {
       canonicalHash,
     ].join('\n');
     List<int> signingKey = credentialList.fold(
-        utf8.encode('AWS4${credentials.secretKey}'), (List<int> key, String s) {
+        utf8.encode('AWS4${config.credentials.secretKey}'), (List<int> key, String s) {
       Hmac hmac = new Hmac(sha256, key);
       return hmac.convert(utf8.encode(s)).bytes;
     });
     String signature =
         new Hmac(sha256, signingKey).convert(utf8.encode(toSign)).toString();
-    if (credentials.sessionToken != null) {
-      headers['X-Amz-Security-Token'] = credentials.sessionToken;
+    if (config.credentials.sessionToken != null) {
+      headers['X-Amz-Security-Token'] = config.credentials.sessionToken;
     }
 
     String auth = '$_aws4HmacSha256 '
-        'Credential=${credentials.accessKey}/${credentialList.join('/')}, '
+        'Credential=${config.credentials.accessKey}/${credentialList.join('/')}, '
         'SignedHeaders=$signedHeaders, '
         'Signature=$signature';
     headers['Authorization'] = auth;
