@@ -12,3 +12,5 @@ dependencies:
   crypto: ^2.0.1
   http_client: ^0.5.0
   xml: ^3.0.0
+  ini: ^2.0.1
+  test: ^1.6.2
